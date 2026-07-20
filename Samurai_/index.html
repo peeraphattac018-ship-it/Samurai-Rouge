@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUSHIDO SHODOWN: INSTANT EDITION</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background: #09090b; color: #fff; overflow: hidden; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .game-container {
+            width: 100vw; height: 100vh; max-width: 950px; max-height: 550px;
+            background: #141416; border: 3px solid #27272a; position: relative;
+            overflow: hidden; display: flex; box-shadow: 0 0 50px rgba(0,0,0,0.9);
+        }
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; padding: 30px; transition: 0.2s; }
+        .hidden { display: none !important; }
+
+        /* หน้าเมนู */
+        .menu-left { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .menu-right { width: 320px; background: rgba(0,0,0,0.7); border: 2px solid #3f3f46; padding: 25px; display: flex; flex-direction: column; gap: 15px; border-radius: 8px; }
+        h1 { font-size: 2.8rem; color: #dc2626; text-shadow: 3px 3px 0 #000; letter-spacing: 2px; font-weight: 900; }
+        input[type="text"] { width: 100%; padding: 12px; background: #09090b; border: 2px solid #52525b; color: #fff; font-size: 1rem; font-weight: bold; text-align: center; }
+        .btn { background: #dc2626; color: white; border: none; padding: 16px; font-size: 1.3rem; cursor: pointer; font-weight: bold; text-transform: uppercase; box-shadow: 4px 4px 0 #000; }
+        .btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 #000; }
+
+        /* ฉากต่อสู้ */
+        .battle-view { flex: 1; background: linear-gradient(to bottom, #18181b 75%, #09090b 75%); position: relative; display: flex; justify-content: space-between; align-items: flex-end; }
+        .hud { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; z-index: 10; }
+        .hp-bg { width: 220px; height: 18px; background: #27272a; border: 2px solid #000; margin-top: 5px; }
+        .hp-fill { width: 100%; height: 100%; background: #22c55e; transition: 0.15s ease-out; }
+        #signal { position: absolute; top: 25%; left: 50%; transform: translateX(-50%); font-size: 4.5rem; font-weight: 900; color: #dc2626; text-shadow: 4px 4px 0 #000; z-index: 10; display: none; }
+
+        /* กล่องตัวละครปรับให้รองรับภาพ PNG/JPG พื้นหลังขาว */
+        .fighter-box { position: absolute; bottom: 45px; width: 220px; height: 260px; display: flex; justify-content: center; align-items: flex-end; transition: transform 0.1s ease-in-out; z-index: 2; }
+        #pBox { left: 40px; }
+        #eBox { right: 40px; transform: scaleX(-1); } /* กลับด้านให้ศัตรูหันหน้ามาชนกัน */
+
+        /* อนิเมชั่นจังหวะเลื่อนที่พุ่งฟัน */
+        .dash-p { transform: translateX(360px) !important; }
+        .dash-e { transform: scaleX(-1) translateX(360px) !important; }
+
+        /* ผืนผ้าใบระบบเลือดสาด */
+        #bloodCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 98; }
+
+        /* โซนควบคุม */
+        .battle-controls { width: 280px; background: #111113; display: flex; flex-direction: column; justify-content: center; padding: 25px; border-left: 3px solid #27272a; }
+        .sheath-area { height: 100%; max-height: 280px; background: #18181b; border: 3px dashed #dc2626; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; border-radius: 8px; }
+        .sheath-area.active { background: #450a0a; border-style: solid; box-shadow: inset 0 0 20px rgba(220,38,38,0.4); }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <canvas id="bloodCanvas"></canvas>
+
+    <!-- 1. หน้าเมนู -->
+    <div class="screen" id="menuScreen">
+        <div class="menu-left">
+            <h1>⚔️ BUSHIDO<br><span style="color:#fff;">SHODOWN</span></h1>
+            <p style="color: #71717a; margin: 10px 0 0 0; font-size: 1.1rem; letter-spacing: 3px;">ALL-IN-ONE STANDALONE</p>
+        </div>
+        <div class="menu-right">
+            <label style="font-size: 0.8rem; color: #a1a1aa; font-weight: bold;">SAMURAI NAME:</label>
+            <input type="text" id="usernameInput" value="HAOHMARU" maxlength="10">
+            <button class="btn" onclick="startGame()">ENTER ARENA</button>
+        </div>
+    </div>
+
+    <!-- 2. ฉากต่อสู้ -->
+    <div class="screen hidden" id="battleScreen" style="padding: 0;">
+        <div class="battle-view" id="arena">
+            <div class="hud">
+                <div>
+                    <span id="pLabel" style="font-weight: bold; color: #38bdf8;">PLAYER</span>
+                    <div class="hp-bg"><div class="hp-fill" id="pHPBar"></div></div>
+                </div>
+                <div style="text-align: right;">
+                    <span id="eLabel" style="font-weight: bold; color: #f43f5e;">STAGE 1</span>
+                    <div class="hp-bg"><div class="hp-fill" id="eHPBar" style="background: #f43f5e;"></div></div>
+                </div>
+            </div>
+
+            <div id="signal">READY</div>
+
+            <!-- โซนวาดกราฟิกตัวละคร (เปลี่ยนรูปภาพด้านในด้วย JS) -->
+            <div class="fighter-box" id="pBox"></div>
+            <div class="fighter-box" id="eBox"></div>
+        </div>
+        
+        <div class="battle-controls">
+            <div class="sheath-area" id="sheathZone">
+                <div style="font-size: 2.5rem; margin-bottom: 15px;">⚔️</div>
+                <div id="ctrlText" style="font-size: 0.9rem; font-weight: bold; color: #a1a1aa; line-height: 1.5;">HOLD HERE<br>TO DRAW BLADE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. หน้าจบเกม -->
+    <div class="screen hidden" id="endScreen" style="flex-direction: column; justify-content: center; align-items: center; gap: 20px; background: rgba(15,2,5,0.95);">
+        <h1 style="font-size: 3.5rem; color: #dc2626;">WASTED</h1>
+        <p id="scoreResult" style="font-size: 1.6rem; color: #fff; font-weight: bold;">STREAK: 0 KILLS</p>
+        <button class="btn" onclick="location.reload()" style="width: 220px; margin-top: 10px;">RESURRECT</button>
+    </div>
+</div>
+
+<script>
+    // 🎨 ดึงภาพซามูไรจากโฟลเดอร์เกม (สั่งเจาะพื้นหลังสีขาวด้วย CSS อัตโนมัติ)
+    const ASSETS = {
+        // --- ฝั่งผู้เล่น (หันขวาปกติ) ---
+        P_IDLE: `<img src="p_idle.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Idle">`,
+        P_ATTACK: `<img src="p_attack.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Attack">`,
+        P_DIE: `<img src="p_die.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Die">`,
+
+        // --- ฝั่งศัตรู (ใช้รูปเดียวกันได้เลย เพราะระบบสเกลติดลบกลับด้านให้อัตโนมัติแล้ว) ---
+        E_IDLE: `<img src="p_idle.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Enemy Idle">`,
+        E_ATTACK: `<img src="p_attack.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Enemy Attack">`,
+        E_DIE: `<img src="p_die.png" style="width:100%; height:100%; object-fit:contain; mix-blend-mode: multiply;" alt="Enemy Die">`
+    };
+
+    // ระบบจัดการเสียงสังเคราะห์
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(freq, type, duration, vol=0.2) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + duration);
+    }
+
+    let killStreak = 0;
+    let roundActive = false, isHolding = false, strikeSignaled = false;
+    let gameTimeout, enemyTimeout;
+
+    function startGame() {
+        const name = document.getElementById('usernameInput').value.trim();
+        if(name) document.getElementById('pLabel').innerText = name.toUpperCase();
+        document.getElementById('menuScreen').classList.add('hidden');
+        document.getElementById('battleScreen').classList.remove('hidden');
+        initRound();
+    }
+
+    function initRound() {
+        roundActive = true; isHolding = false; strikeSignaled = false;
+        document.getElementById('eLabel').innerText = `STAGE ${killStreak + 1}: DAIMYO`;
+        
+        // โหลดรูปภาพเริ่มต้น (ท่ายืน Idle)
+        document.getElementById('pBox').className = "fighter-box";
+        document.getElementById('eBox').className = "fighter-box";
+        document.getElementById('pBox').innerHTML = ASSETS.P_IDLE;
+        document.getElementById('eBox').innerHTML = ASSETS.E_IDLE;
+        
+        document.getElementById('pHPBar').style.width = "100%";
+        document.getElementById('eHPBar').style.width = "100%";
+        
+        const canvas = document.getElementById('bloodCanvas');
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+
+        const sig = document.getElementById('signal');
+        sig.innerText = "READY..."; sig.style.color = "#fff"; sig.style.display = "block";
+        document.getElementById('sheathZone').classList.remove('active');
+        document.getElementById('ctrlText').innerHTML = "HOLD HERE<br>TO DRAW BLADE";
+
+        clearTimeout(gameTimeout); clearTimeout(enemyTimeout);
+    }
+
+    // ระบบการชาร์จและตรวจจับจังหวะสับดาบ
+    const zone = document.getElementById('sheathZone');
+    function onDown(e) {
+        e.preventDefault();
+        if (!roundActive || isHolding) return;
+        isHolding = true;
+        zone.classList.add('active');
+        document.getElementById('ctrlText').innerHTML = "FOCUS...<br>RELEASE ON SIGNAL!";
+        document.getElementById('signal').innerText = "STEADY...";
+        playSound(220, 'sine', 0.1, 0.4);
+        gameTimeout = setTimeout(triggerStrike, Math.random() * 2500 + 1800);
+    }
+
+    function onUp(e) {
+        e.preventDefault();
+        if (!roundActive || !isHolding) return;
+        if (strikeSignaled) { executePlayerWin(); } else { executeFoul(); }
+    }
+
+    zone.addEventListener('mousedown', onDown); zone.addEventListener('mouseup', onUp);
+    zone.addEventListener('touchstart', onDown); zone.addEventListener('touchend', onUp);
+
+    function triggerStrike() {
+        strikeSignaled = true;
+        const sig = document.getElementById('signal');
+        sig.innerText = "斬 STRIKE!!"; sig.style.color = "#dc2626";
+        playSound(880, 'square', 0.12, 0.3);
+
+        let reactionTime = Math.max(140, 360 - (killStreak * 40));
+        enemyTimeout = setTimeout(() => {
+            if (strikeSignaled && roundActive) executeEnemyWin();
+        }, reactionTime);
+    }
+
+    // ผู้เล่นชนะ: สลับเป็นรูปโจมตี พุ่งฟัน สาดสเปรย์เลือด ศัตรูกลายเป็นรูปหงายหลัง
+    function executePlayerWin() {
+        roundActive = false;
+        document.getElementById('pBox').innerHTML = ASSETS.P_ATTACK;
+        document.getElementById('pBox').classList.add('dash-p');
+        
+        setTimeout(() => {
+            playSound(1300, 'sawtooth', 0.3, 0.4);
+            generateRealBloodSplash(640, 220); // พ่นสเปรย์เลือดใส่ฝั่งขวา
+            
+            document.getElementById('eHPBar').style.width = "0%";
+            document.getElementById('eBox').innerHTML = ASSETS.E_DIE;
+            killStreak++;
+            
+            setTimeout(initRound, 2000);
+        }, 100);
+    }
+
+    // ศัตรูชนะ
+    function executeEnemyWin() {
+        roundActive = false;
+        document.getElementById('eBox').innerHTML = ASSETS.E_ATTACK;
+        document.getElementById('eBox').classList.add('dash-e');
+
+        setTimeout(() => {
+            playSound(180, 'sawtooth', 0.5, 0.5);
+            generateRealBloodSplash(220, 220); // พ่นสเปรย์เลือดใส่ฝั่งซ้าย
+            
+            document.getElementById('pHPBar').style.width = "0%";
+            document.getElementById('pBox').innerHTML = ASSETS.P_DIE;
+            
+            setTimeout(showGameOver, 1800);
+        }, 100);
+    }
+
+    function executeFoul() {
+        roundActive = false;
+        clearTimeout(gameTimeout);
+        document.getElementById('signal').innerText = "TOO EARLY!";
+        executeEnemyWin();
+    }
+
+    // ระบบสเปรย์สาดเลือดปื้นใหญ่และไหลย้อยลงพื้นแบบเรียลไทม์
+    function generateRealBloodSplash(targetX, targetY) {
+        const canvas = document.getElementById('bloodCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
+        ctx.fillStyle = 'rgba(153, 0, 0, 0.95)';
+        
+        ctx.beginPath(); ctx.arc(targetX, targetY, 45, 0, Math.PI * 2); ctx.fill();
+
+        for (let i = 0; i < 60; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let distance = Math.random() * 160 + 15;
+            let splashX = targetX + Math.cos(angle) * distance;
+            let splashY = targetY + Math.sin(angle) * distance;
+            let radius = Math.random() * 12 + 2;
+
+            ctx.beginPath(); ctx.arc(splashX, splashY, radius, 0, Math.PI * 2); ctx.fill();
+
+            if (Math.random() > 0.3) {
+                ctx.beginPath(); ctx.moveTo(splashX, splashY);
+                ctx.lineTo(splashX + (Math.random() * 4 - 2), splashY + Math.random() * 110 + 30);
+                ctx.strokeStyle = 'rgba(130, 0, 0, 0.85)'; ctx.lineWidth = radius * 0.5; ctx.stroke();
+            }
+        }
+    }
+
+    function showGameOver() {
+        document.getElementById('battleScreen').classList.add('hidden');
+        document.getElementById('endScreen').classList.remove('hidden');
+        document.getElementById('scoreResult').innerText = `STREAK: ${killStreak} KILLS`;
+    }
+</script>
+</body>
+</html>
